@@ -1,5 +1,5 @@
-Scriptname Snappy:SnappyElevatorButtonScript extends ObjectReference
-{This script talks to the Elevator script for the workshop elevators}
+Scriptname Snappy:ElevatorInButtonScript extends ObjectReference
+;based on the DLC05 elevator scripts
 
 Message Property Snappy_ElevatorRequiresPowerMessage Auto Const Mandatory
 {Message Shown when there is no power}
@@ -29,7 +29,7 @@ Auto State Ready
 			;Play the button press anim
 			PlayAnimation("Play01")
 			;If the elevator is busy, immediately go back
-			if (GetLinkedRef() as Snappy:SnappyElevatorScript5).GoToFloor(FloorNumber)
+			if (GetLinkedRef() as Snappy:MainElevatorScript).GoToFloor(FloorNumber)
 				Debug.Trace(self + ": myElevator is busy")
 				utility.wait(1.0)
 				PlayAnimation("Play01")
@@ -48,16 +48,3 @@ EndState
 
 State busy
 EndState
-;/
-State busy
-	Function SetButtonFree()
-		if hasPower
-			PlayAnimation("Play01")
-		endif
-		GoToState("Ready")
-	EndFunction
-EndState
-
-Function SetButtonFree()
-EndFunction
-/;

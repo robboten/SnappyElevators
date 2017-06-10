@@ -1,4 +1,4 @@
-ScriptName Snappy:SnappyElevatorScript5 extends ObjectReference hidden
+ScriptName Snappy:MainElevatorScript extends ObjectReference hidden
 
 ;-- Structs -----------------------------------------
 Struct ButtonData
@@ -73,7 +73,7 @@ Group Optional_Properties collapsedonref
 	{ node in the nif to place button panel at }
 	string Property DoorOutNode = "DoorWayNode0" Auto conditional
 	{ node in the nif to place outer doors at - without last digit }
-	Float Property fSpeed = 9.0 const auto conditional
+	Float Property fSpeed = 8.0 const auto conditional
 	{ Speed of the car higher is slower }
 	EffectShader Property HighlightUnpoweredFX Auto Const
 	{ Effect Shader to highlight unpowered objects - unused atm }
@@ -103,7 +103,7 @@ Function PlaceButtons()
 		; place skeleton
 		skeletonRef = Self.PlaceAtNode(RootNode, Skeleton, 1, False, False, False, True)
 		skeletonRef.SetLinkedRef(Self, LinkCustom12)
-		Self.SetLinkedRef(skeletonRef, None)
+		Self.SetLinkedRef(skeletonRef, LinkCustom12)
 		Debug.Trace("Current movement speed: " + skeletonRef.GetAnimationVariableFloat("fspeed"))
 		skeletonRef.SetAnimationVariableFloat("fspeed", fSpeed)
 
@@ -227,7 +227,7 @@ Function PowerButtons(bool shouldBePowered)
 	int I = 0
 	int Count = MyButtons.length
 	While (I < Count)
-		(skeletonRef.GetLinkedRef(MyButtons[I].LinkKeyword) as Snappy:SnappyElevatorButtonScript).SetHasPower(shouldBePowered)
+		(skeletonRef.GetLinkedRef(MyButtons[I].LinkKeyword) as Snappy:ElevatorInButtonScript).SetHasPower(shouldBePowered)
 		I += 1
 	EndWhile
 EndFunction
@@ -259,6 +259,8 @@ Function DoFloorChange(int floorToGoTo)
 		; move the car
 		skeletonRef.PlayAnimationAndWait(FloorAnims[floorToGoTo - 1], Done)
 
+		Game.ShakeCamera(afStrength = 0.1)
+		
 		if(AltSound)
 			Sound.StopInstance(PlatformSoundInstance)
 		EndIf
@@ -357,6 +359,7 @@ EndEvent
 
 Event OnWorkshopObjectDestroyed(ObjectReference akReference)
 	ObjectReference skeletonRef = Self.GetLinkedRef(LinkCustom12)
+	Debug.Trace(skeletonRef)
 	ObjectReference[] LinkedRefs = Self.GetRefsLinkedToMe()
 	int i = 0
 	while (i < LinkedRefs.length)
@@ -364,7 +367,7 @@ Event OnWorkshopObjectDestroyed(ObjectReference akReference)
 		i += 1
 	endwhile
 
-	skeletonRef.GetLinkedRef(LinkCustom11).Delete() ; not sure if this is needed...
+	skeletonRef.GetLinkedRef(LinkCustom11).Delete() ; not sure if this is needed... delete car...
 
 	If (Muzak as bool)
 		Sound.StopInstance(MuzakSoundInstance)

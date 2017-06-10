@@ -1,22 +1,19 @@
-Scriptname Snappy:SnappyElevatorButtonScript3 extends ObjectReference
+Scriptname Snappy:ElevatorOutButtonScript extends ObjectReference
+;based on the DLC05 elevator scripts
 
 ;-- Properties --------------------------------------
-ObjectReference Property btnRef Auto Const
 Message Property ElevatorBtnMsg1 Auto Const mandatory
-Message Property ButtonText Auto Const mandatory
-int Property FloorNumber = 1 Auto Hidden
-Snappy:SnappyElevatorScript5 Property elevatorScript Auto
-
-EffectShader Property HighlightUnpoweredFX Auto Const
-{ Effect Shader to highlight unpowered objects }
-
-Keyword Property LinkCustom05 Auto Const
+{ message to display when placed }
+int Property FloorNumber = 1 Auto Hidden ;default floor nr
+Snappy:MainElevatorScript Property elevatorScript Auto hidden;link to the elevatorScript
+Keyword Property LinkCustom05 Auto Const ; different keywords for different floors or same for all?
+{ keyword link to the button }
 Keyword Property LinkCustom12 Auto Const
-
+{ keyword link to the elevator }
 Activator Property elevator Auto Const mandatory
-
+{ what to look for when placing the button }
 string Property PlayAnimation = "Play02" Auto conditional
-{ node in the nif to place outer doors at - without last digit }
+{ Animation for the buttons to play when on }
 
 bool hasPower
 Function SetHasPower(bool shouldBePowered)
@@ -28,31 +25,27 @@ Function SetHasPower(bool shouldBePowered)
 	endif
 EndFunction
 
-;-- Variables ---------------------------------------
-ObjectReference elevatorRef = None
-
 ;-- Events ---------------------------------------
 Event OnWorkshopObjectGrabbed(ObjectReference akReference)
-  ;ObjectReference elevatorRef = Game.FindClosestReferenceOfTypeFromRef(elevator, Self, 1024.0)
+	;highlight elevator when grabbed
   elevatorScript.glow("Play")
 EndEvent
 
 Event OnWorkshopObjectMoved(ObjectReference akReference)
-  ;ObjectReference elevatorRef = Game.FindClosestReferenceOfTypeFromRef(elevator, Self, 1024.0)
+	;stop highlight when placed again
   elevatorScript.glow("Stop")
 EndEvent
 
 Event OnWorkshopObjectPlaced(ObjectReference akReference)
-  elevatorRef = Game.FindClosestReferenceOfTypeFromRef(elevator, Self, 1024.0).GetLinkedRef(LinkCustom12)
+	ObjectReference elevatorRef = Game.FindClosestReferenceOfTypeFromRef(elevator, Self, 1024.0).GetLinkedRef(LinkCustom12)
 
 	if(elevatorRef!=None)
-		elevatorScript = elevatorRef as Snappy:SnappyElevatorScript5
+		elevatorScript = elevatorRef as Snappy:MainElevatorScript
 		elevatorScript.glow("On")
 
 		int nrFloors = elevatorScript.nrFloors ; get elevator nr of floors
 
 	  FloorNumber = ElevatorBtnMsg1.Show() ;show floor nr popup
-	  ;Self.SetActivateTextOverride(ButtonText) ; doesn't work as intended...
 	  Self.SetLinkedRef(elevatorRef as ObjectReference, None)
 	  elevatorRef.SetLinkedRef(Self, LinkCustom05)
 	  Self.RegisterForRemoteEvent(Self as ObjectReference, "OnWorkshopObjectDestroyed")
@@ -71,7 +64,7 @@ Auto State Ready
 			;Play the button press anim
 			PlayAnimation(PlayAnimation)
 			;If the elevator is busy, immediately go back
-			if (GetLinkedRef() as Snappy:SnappyElevatorScript5).GoToFloor(FloorNumber)
+			if (GetLinkedRef() as Snappy:MainElevatorScript).GoToFloor(FloorNumber)
 				Debug.Trace(self + ": myElevator is busy")
 				utility.wait(1.0)
 				PlayAnimation("StartOff")
@@ -93,7 +86,5 @@ EndState
 
 Event ObjectReference.OnWorkshopObjectDestroyed(ObjectReference akSender, ObjectReference akActionRef)
 	Debug.Trace(self + ": Has Received OnWorkshopObjectDestroyed !!!!!")
-	elevatorRef = None
-	elevatorRef.Delete()
 	Delete()
 EndEvent
