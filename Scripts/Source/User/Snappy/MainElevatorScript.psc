@@ -100,9 +100,11 @@ Function PlaceButtons()
 	If (!buttonsPlaced && (nrFloors>1))
 		buttonsPlaced = True
 
+		Self.AddKeyword(LinkCustom12) ;add keyword to find with placeable buttons
+
 		; place skeleton
 		skeletonRef = Self.PlaceAtNode(RootNode, Skeleton, 1, False, False, False, True)
-		skeletonRef.SetLinkedRef(Self, LinkCustom12)
+		skeletonRef.SetLinkedRef(Self, None)
 		Self.SetLinkedRef(skeletonRef, LinkCustom12)
 		Debug.Trace("Current movement speed: " + skeletonRef.GetAnimationVariableFloat("fspeed"))
 		skeletonRef.SetAnimationVariableFloat("fspeed", fSpeed)
@@ -259,8 +261,6 @@ Function DoFloorChange(int floorToGoTo)
 		; move the car
 		skeletonRef.PlayAnimationAndWait(FloorAnims[floorToGoTo - 1], Done)
 
-		Game.ShakeCamera(afStrength = 0.1)
-		
 		if(AltSound)
 			Sound.StopInstance(PlatformSoundInstance)
 		EndIf
@@ -368,7 +368,7 @@ Event OnWorkshopObjectDestroyed(ObjectReference akReference)
 	endwhile
 
 	skeletonRef.GetLinkedRef(LinkCustom11).Delete() ; not sure if this is needed... delete car...
-
+	skeletonRef.ResetKeyword(LinkCustom12)
 	If (Muzak as bool)
 		Sound.StopInstance(MuzakSoundInstance)
 	EndIf

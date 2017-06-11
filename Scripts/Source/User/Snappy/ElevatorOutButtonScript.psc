@@ -37,7 +37,10 @@ Event OnWorkshopObjectMoved(ObjectReference akReference)
 EndEvent
 
 Event OnWorkshopObjectPlaced(ObjectReference akReference)
-	ObjectReference elevatorRef = Game.FindClosestReferenceOfTypeFromRef(elevator, Self, 1024.0).GetLinkedRef(LinkCustom12)
+	ObjectReference[] elevatorRefArray = Self.FindAllReferencesWithKeyword(LinkCustom12, 1024.0)
+	Debug.Trace("found elevator link: " + elevatorRefArray[0])
+	;ObjectReference elevatorRef = Game.FindClosestReferenceOfTypeFromRef(elevator, Self, 1024.0).GetLinkedRef(LinkCustom12)
+	ObjectReference elevatorRef = elevatorRefArray[0]
 
 	if(elevatorRef!=None)
 		elevatorScript = elevatorRef as Snappy:MainElevatorScript
