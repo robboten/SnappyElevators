@@ -86,6 +86,7 @@ bool buttonsPlaced = False
 int CurrentFloor = 1
 int MuzakSoundInstance
 ObjectReference[] doorOutRef
+ObjectReference[] tempParts
 
 ;-- Functions ---------------------------------------
 
@@ -296,6 +297,32 @@ bool Function GoToFloor(int floorToGoTo)
 	return False
 EndFunction
 
+Function DestroyElevator()
+	ObjectReference skeletonRef = Self.GetLinkedRef(LinkCustom12)
+	Debug.Trace(skeletonRef)
+	ObjectReference[] LinkedRefs = Self.GetRefsLinkedToMe()
+	int i = 0
+	while (i < LinkedRefs.length)
+		LinkedRefs[i].Delete()
+		i += 1
+	endwhile
+
+	skeletonRef.GetLinkedRef(LinkCustom11).Delete() ; not sure if this is needed... delete car...
+
+	skeletonRef.ResetKeyword(LinkCustom12) ;remove or reset?
+	skeletonRef.RemoveKeyword(LinkCustom12)
+	Self.RemoveKeyword(LinkCustom12)
+
+	If (Muzak as bool)
+		Sound.StopInstance(MuzakSoundInstance)
+	EndIf
+
+	skeletonRef.Delete()
+	skeletonRef = None
+
+	doorOutRef.Clear()
+	buttonsPlaced = False
+EndFunction
 
 ;-- Events ---------------------------------------
 Event OnCellAttach()
@@ -340,6 +367,7 @@ Event OnPowerOff()
 EndEvent
 
 Event OnWorkshopObjectPlaced(ObjectReference akReference)
+	Debug.Trace("Placed")
 	Self.PlaceButtons()
 	;Self.PlaceNavCuts()
 	Self.BlockActivation(True, True)
@@ -348,35 +376,19 @@ EndEvent
 Event OnWorkshopObjectGrabbed(ObjectReference akReference)
 	;Self.SetCallButtonsOff(True)
 	;Self.SetNavCutOff(True)
-	;Debug.Trace("grabbed")
+	Debug.Trace("Grabbed")
+	DestroyElevator()
 EndEvent
 
 Event OnWorkshopObjectMoved(ObjectReference akReference)
 	;Self.SetCallButtonsOff(False)
+	Self.PlaceButtons()
 	Self.GoToState("WaitingForActivate")
-	;Debug.Trace("moved")
+	Debug.Trace("moved")
 EndEvent
 
 Event OnWorkshopObjectDestroyed(ObjectReference akReference)
-	ObjectReference skeletonRef = Self.GetLinkedRef(LinkCustom12)
-	Debug.Trace(skeletonRef)
-	ObjectReference[] LinkedRefs = Self.GetRefsLinkedToMe()
-	int i = 0
-	while (i < LinkedRefs.length)
-		LinkedRefs[i].Delete()
-		i += 1
-	endwhile
-
-	skeletonRef.GetLinkedRef(LinkCustom11).Delete() ; not sure if this is needed... delete car...
-	skeletonRef.ResetKeyword(LinkCustom12)
-	If (Muzak as bool)
-		Sound.StopInstance(MuzakSoundInstance)
-	EndIf
-
-	skeletonRef.Delete()
-	skeletonRef = None
-
-	doorOutRef.Clear()
+	DestroyElevator()
 
 	UnregisterForMenuOpenCloseEvent("WorkshopMenu")
 	Delete()
