@@ -94,7 +94,7 @@ Function PlaceButtons()
 	Self.BlockActivation(True, True)
 	ObjectReference doorInRef = none
 	ObjectReference skeletonRef = none
-
+	
 	; show messagebox to choose nr of floors
 	nrFloors = ElevatorMsg1.Show()
 
