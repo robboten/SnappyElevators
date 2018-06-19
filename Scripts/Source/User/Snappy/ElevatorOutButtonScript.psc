@@ -1,93 +1,92 @@
-Scriptname Snappy:ElevatorOutButtonScript extends ObjectReference
-;based on the DLC05 elevator scripts
+scriptname Snappy:ElevatorOutButtonScript extends Snappy:ElevatorInButtonScript
 
-;-- Properties --------------------------------------
-Message Property ElevatorBtnMsg1 Auto Const mandatory
-{ message to display when placed }
-int Property FloorNumber = 1 Auto Hidden ;default floor nr
-Snappy:MainElevatorScript Property elevatorScript Auto hidden;link to the elevatorScript
-Keyword Property LinkCustom05 Auto Const ; different keywords for different floors or same for all?
-{ keyword link to the button }
-Keyword Property LinkCustom12 Auto Const
-{ keyword link to the elevator }
-Activator Property elevator Auto Const mandatory
-{ what to look for when placing the button }
-string Property PlayAnimation = "Play02" Auto conditional
-{ Animation for the buttons to play when on }
+import Math
 
-bool hasPower
-Function SetHasPower(bool shouldBePowered)
-	hasPower = shouldBePowered
-	if hasPower
-		PlayAnimation("Play02")
-	else
-		PlayAnimation("StartOff")
-	endif
-EndFunction
+Keyword property Snappy_ElevatorKeyword auto const mandatory
+{ Give this keyword to all elevators with MainElevatorScript. }
+Message property Snappy_CallButtonNotRespondingMessage = none auto const
+{ Message to show if no elevator is linked to this button. E.g. 'Not responding.'. }
+float property ElevatorFlashDuration = 2.33 auto const
+{ Elevator will flash for this long after being linked to this button. }
+float property ButtonZOffset = 0.0 auto const
+{ The offset from the root node to the z position of the center of the actual button. }
+string property StartOffAnimation = "" auto
 
-;-- Events ---------------------------------------
-Event OnWorkshopObjectGrabbed(ObjectReference akReference)
-	;highlight elevator when grabbed
-  elevatorScript.glow("Play")
-EndEvent
+; Snappy:ElevatorInButtonScript override.
+function InitializeElevator(Snappy:MainElevatorScript akElevatorRef)
+    parent.InitializeElevator(akElevatorRef)
+    FloorNumber = akElevatorRef.GetCallButtonFloor(z + ButtonZOffset)
+    Debug.Trace("My floor number is " + FloorNumber)
+    akElevatorRef.StartFlashing(ElevatorFlashDuration)
+endfunction
 
-Event OnWorkshopObjectMoved(ObjectReference akReference)
-	;stop highlight when placed again
-  elevatorScript.glow("Stop")
-EndEvent
+; Does not return the actual distance. Square roots are expensive!
+float function GetRelativeXYDistanceToSelf(ObjectReference akOther)
+    return pow(x - akOther.x, 2) + pow(y - akOther.y, 2)
+endfunction
 
-Event OnWorkshopObjectPlaced(ObjectReference akReference)
-	ObjectReference[] elevatorRefArray = Self.FindAllReferencesWithKeyword(LinkCustom12, 1024.0)
-	Debug.Trace("found elevator link: " + elevatorRefArray[0])
-	;ObjectReference elevatorRef = Game.FindClosestReferenceOfTypeFromRef(elevator, Self, 1024.0).GetLinkedRef(LinkCustom12)
-	ObjectReference elevatorRef = elevatorRefArray[0]
+bool function FindElevator()
+    ObjectReference[] elevatorRefs = self.FindAllReferencesWithKeyword(Snappy_ElevatorKeyword, 1024.0)
+    Debug.Notification("Found " + elevatorRefs.Length + " elevators.")
+    if (elevatorRefs.Length > 0)
+        ObjectReference elevatorRef = none
+        float currentDist = 0.0
+        int i = 0
+        while (i < elevatorRefs.Length)
+            if (elevatorRefs[i].IsEnabled())
+                if (!elevatorRef)
+                    elevatorRef = elevatorRefs[i]
+                    currentDist = GetRelativeXYDistanceToSelf(elevatorRef)
+                else
+                    float newDist = GetRelativeXYDistanceToSelf(elevatorRefs[i])
+                    if (newDist < currentDist)
+                        elevatorRef = elevatorRefs[i]
+                        currentDist = newDist
+                    endif
+                endif
+            endif
+            i += 1
+        endwhile
 
-	if(elevatorRef!=None)
-		elevatorScript = elevatorRef as Snappy:MainElevatorScript
-		elevatorScript.glow("On")
+        if (elevatorRef)
+            InitializeElevator(elevatorRef as Snappy:MainElevatorScript)
+            return true
+        endif
+    endif
 
-		int nrFloors = elevatorScript.nrFloors ; get elevator nr of floors
+    return false
+endfunction
+bool function FindNewElevator()
+    ClearElevator()
+    return FindElevator()
+endfunction
 
-	  FloorNumber = ElevatorBtnMsg1.Show() ;show floor nr popup
-	  Self.SetLinkedRef(elevatorRef as ObjectReference, None)
-	  elevatorRef.SetLinkedRef(Self, LinkCustom05)
-	  Self.RegisterForRemoteEvent(Self as ObjectReference, "OnWorkshopObjectDestroyed")
-	  PlayAnimation("StartOff")
-		elevatorScript.glow("Stop")
-	else
-	    Debug.MessageBox("No Nearby Elevator Found!")
-	endIf
-	elevatorScript.glow("Stop")
-EndEvent
+; Snappy:ElevatorInButtonScript override.
+auto state Ready
+    ; Snappy:ElevatorInButtonScript override.
+    function HandleActivation(ObjectReference akActionRef)
+        ; Check if we have a linked elevator.
+        if (self.GetElevator())
+            parent.HandleActivation(akActionRef)
+        ; If we don't have an elevator, show the 'Not responding.' message.
+        elseif (Snappy_CallButtonNotRespondingMessage)
+            Snappy_CallButtonNotRespondingMessage.Show()
+        endif
+    endfunction
+endstate
 
-Auto State Ready
-	Event OnActivate(ObjectReference akActivator)
-		GoToState("busy")
-		;if hasPower
-			;Play the button press anim
-			PlayAnimation(PlayAnimation)
-			;If the elevator is busy, immediately go back
-			if (GetLinkedRef() as Snappy:MainElevatorScript).GoToFloor(FloorNumber)
-				Debug.Trace(self + ": myElevator is busy")
-				utility.wait(1.0)
-				PlayAnimation("StartOff")
-				GoToState("Ready")
-			else 	;This occurs if the elevator is NOT busy
-					;and happens after it reaches the floor intended
-				PlayAnimation("StartOff")
-				GoToState("Ready")
-			endif
-		;else
-		;	DLC05_ElevatorRequiresPowerMessage.Show()
-			;GoToState("Ready")
-		;endif
-	EndEvent
-EndState
-
-State busy
-EndState
-
-Event ObjectReference.OnWorkshopObjectDestroyed(ObjectReference akSender, ObjectReference akActionRef)
-	Debug.Trace(self + ": Has Received OnWorkshopObjectDestroyed !!!!!")
-	Delete()
-EndEvent
+event OnWorkshopObjectGrabbed(ObjectReference akWorkshopRef)
+    Snappy:MainElevatorScript elevatorRef = self.GetElevator()
+    if (elevatorRef)
+        elevatorRef.StartFlashing(ElevatorFlashDuration)
+    endif
+endevent
+event OnWorkshopObjectMoved(ObjectReference akWorkshopRef)
+    FindNewElevator()
+endevent
+event OnWorkshopObjectPlaced(ObjectReference akWorkshopRef)
+    if (StartOffAnimation != "")
+        self.PlayAnimation(StartOffAnimation)
+    endif
+    FindElevator()
+endevent

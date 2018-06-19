@@ -1,50 +1,79 @@
-Scriptname Snappy:ElevatorInButtonScript extends ObjectReference
+scriptname Snappy:ElevatorInButtonScript extends ObjectReference
 ;based on the DLC05 elevator scripts
 
-Message Property Snappy_ElevatorRequiresPowerMessage Auto Const Mandatory
-{Message Shown when there is no power}
+string property ButtonStartAnimation = "Play02" auto
+{ Animation for the buttons to play when on }
+string property ButtonStopAnimation = "Play02" auto
+{ Animation for the buttons to play when stopped }
+string property ButtonPressAnimation = "Play01" auto const
+string property ButtonPressEvent = "End" auto const
+{ If not an empty string, the button press animation will wait for this event. }
+string property ButtonIdleAnimation = "Play02" auto const
+{ Animation for the buttons to play when idling with power }
+string property ButtonPowerOffAnimation = "Play02" auto const
+{ Animation for the buttons to play when not powered }
 
-int Property FloorNumber = 1 Auto Const
-{Which floor this button goes to}
+int property FloorNumber = 1 auto
 
-bool hasPower
-Function SetHasPower(bool shouldBePowered)
-	hasPower = shouldBePowered
-	if hasPower
-		PlayAnimation("Play02")
-	else
-		PlayAnimation("StartOff")
-	endif
-EndFunction
+bool hasPower = true
 
-Event ObjectReference.OnWorkshopObjectDestroyed(ObjectReference akSender, ObjectReference akActionRef)
-	Debug.Trace(self + ": Has Received OnWorkshopObjectDestroyed !!!!!")
-	Delete()
-EndEvent
+Snappy:MainElevatorScript myElevatorRef = none
+Snappy:MainElevatorScript function GetElevator()
+    return myElevatorRef
+endfunction
+function ClearElevator()
+    if (myElevatorRef)
+        ;self.UnregisterForRemoteEvent(myElevatorRef, "OnWorkshopObjectDestroyed")
+        self.UnregisterForCustomEvent(myElevatorRef, "PowerChange")
+    endif
+    myElevatorRef = none
+endfunction
 
-Auto State Ready
-	Event OnActivate(ObjectReference akActivator)
-		GoToState("busy")
-		;if hasPower
-			;Play the button press anim
-			PlayAnimation("Play01")
-			;If the elevator is busy, immediately go back
-			if (GetLinkedRef() as Snappy:MainElevatorScript).GoToFloor(FloorNumber)
-				Debug.Trace(self + ": myElevator is busy")
-				utility.wait(1.0)
-				PlayAnimation("Play01")
-				GoToState("Ready")
-			else 	;This occurs if the elevator is NOT busy
-					;and happens after it reaches the floor intended
-				PlayAnimation("Play01")
-				GoToState("Ready")
-			endif
-		;else
-		;	Snappy_ElevatorRequiresPowerMessage.Show()
-			;GoToState("Ready")
-		;endif
-	EndEvent
-EndState
+function InitializeElevator(Snappy:MainElevatorScript akElevatorRef)
+    myElevatorRef = akElevatorRef
+    ;self.RegisterForRemoteEvent(akElevatorRef, "OnWorkshopObjectDestroyed")
+    self.RegisterForCustomEvent(akElevatorRef, "PowerChange")
+endfunction
 
-State busy
-EndState
+function SetHasPower(bool shouldBePowered)
+    hasPower = shouldBePowered
+    if (hasPower)
+        self.PlayAnimation(ButtonIdleAnimation)
+    else
+        self.PlayAnimation(ButtonPowerOffAnimation)
+    endif
+endfunction
+
+function HandleActivation(ObjectReference akActionRef)
+endfunction
+
+auto state Ready
+    function HandleActivation(ObjectReference akActionRef)
+        self.GoToState("Busy")
+
+        ; Play the button press animation.
+        self.PlayAnimationAndWait(ButtonPressAnimation, ButtonPressEvent)
+
+        myElevatorRef.GoToFloor(FloorNumber)
+
+        Utility.Wait(1.0)
+
+        if (ButtonStopAnimation != "")
+            self.PlayAnimation(ButtonStopAnimation)
+        endif
+
+        self.GoToState("Ready")
+    endfunction
+endstate
+
+state Busy
+    ; Empty state to prevent activation script.
+endstate
+
+event OnActivate(ObjectReference akActivator)
+    HandleActivation(akActivator)
+endevent
+
+event Snappy:MainElevatorScript.PowerChange(Snappy:MainElevatorScript akSender, var[] akArgs)
+    SetHasPower(akArgs[0] as bool)
+endevent

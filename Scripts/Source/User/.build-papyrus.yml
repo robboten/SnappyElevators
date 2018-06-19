@@ -1,0 +1,7 @@
+game: Fallout4
+output: C:\Users\sabri\AppData\Local\ModOrganizer\Fallout 4\mods\snappy elevators\Scripts\
+release: false
+final: false
+imports:
+    - C:\Users\sabri\AppData\Local\ModOrganizer\Fallout 4\mods\snappy elevators\Scripts\Source\User
+    - C:\Games\Steam\SteamApps\common\Fallout 4\Data\Scripts\Source\Base

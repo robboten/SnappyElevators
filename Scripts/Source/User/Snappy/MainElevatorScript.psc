@@ -1,413 +1,466 @@
-ScriptName Snappy:MainElevatorScript extends ObjectReference hidden
+scriptName Snappy:MainElevatorScript extends ObjectReference
 
-;-- Structs -----------------------------------------
-Struct ButtonData
-	Activator Button
-	string Node
-	Keyword LinkKeyword
-	bool AttachToTrack
-EndStruct
+customevent PowerChange
+
+struct ButtonData
+    ObjectReference ref = none hidden
+    Activator button
+    string node
+endstruct
 
 ;-- Properties --------------------------------------
-Group Required_Properties collapsedonref
-	string[] Property FloorAnims Auto Const mandatory
-	{ This array stores Floors anim strings
-		they should be 1 lower in index than the floor number
-		EG: Index 0 == Level01 }
-	string Property Done = "Done" Auto Const hidden
-	;Activator Property PlatformHelperFree Auto Const mandatory
-	Message Property ElevatorMsg1 Auto Const mandatory
-	;{ platform helper Activator }
-	;Activator Property Button01 Auto Const mandatory
-	Static Property Car01 Auto Const mandatory
-	{ Elevator Car - Static }
-	Static Property ElevatorPanel Auto Const mandatory
-	{ Panel for the buttons inside the car }
-	Activator Property Skeleton Auto Const mandatory
-	{ Skeleton for the elevator }
-	Keyword Property LinkCustom10 Auto Const mandatory
-	{ Keyword Link to the inner door }
-	Keyword Property LinkCustom11 Auto Const mandatory
-	 { Keyword Link to the car }
-	 Keyword Property LinkCustom12 Auto Const mandatory
- 	 { Keyword Link to the skeleton }
-	 int Property nrFloors = 0 auto hidden
-EndGroup
+group AutoFill
+    Keyword property WorkshopCanBePowered auto const mandatory
+    { Used to check if this elevator requires power. }
+    GlobalVariable property Snappy_ElevatorSpeedMult auto const mandatory
+    GlobalVariable property Snappy_ElevatorPlayMuzakOnlyWhileMoving auto const mandatory
+endgroup
+group Required collapsedonref
+    string[] Property FloorAnims auto const mandatory
+    { This array stores Floors anim strings
+        they should be 1 lower in index than the floor number
+        EG: Index 0 == Level01 }
+    string Property Done = "Done" auto const hidden
+    { 'Done' event. }
+    Message Property ElevatorMsg1 auto const mandatory
+    { Message to show when choosing number of floors. }
+    Activator Property Skeleton auto const mandatory
+    { Skeleton for the elevator. }
+    Static Property Car01 auto const mandatory
+    { Elevator car. }
+    Static Property ElevatorPanel auto const mandatory
+    { Panel for the buttons inside the car. }
+    Static Property ShaftDoor auto const mandatory
+    { Shaft doorway. }
+    ButtonData[] property MyButtons auto mandatory
+endgroup
+group Optional collapsedonref
+    Activator property PlayerOnElevatorTrigger = none auto const
+    { Trigger to keep track if player is on an elevator. Moves with the car. }
+    Door Property DoorIn = none auto const
+    { Door for elevator Car }
+    Door Property DoorOut = none auto const
+    { Door for shaft doorways }
+    Form Property CarLight = none auto const
+    { Light source for the car }
+    float property CarLightZOffset = -38.0 auto const
+    Static Property ShaftFloor = none auto const
+    { Shaft Floor }
+    Static Property ShaftTop = none auto const
+    { Shaft Top/Ceiling }
+    Static Property ShaftDoor1 = none auto const
+    { Bottom Shaft Doorway }
+    Form Property HatchDoor = none auto const
+    { Elevator hatch - Door }
+    Sound Property AltSound = none auto const
+    { Alternative elevator sound }
+    Sound Property Muzak = none auto const
+    { Looping sound for muzak }
+    string Property CarNode = "Car01" auto const
+    { node in the nif to the place the car at }
+    string Property DoorInNode = "DoorWayNode01" auto const
+    { node in the nif to place inner door at}
+    string Property RootNode = "RootNode" auto const
+    { node in the nif to place skeleton at }
+    string Property ShaftNode = "NavCutterNode0" auto const
+    { node in the nif to place shaft walls at - without last digit }
+    string Property FloorNode = "ShaftFloor" auto const
+    { node in the nif to place shaft floor at }
+    string Property PanelNode = "Button03" auto const
+    { node in the nif to place button panel at }
+    string Property DoorOutNode = "DoorWayNode0" auto const
+    { node in the nif to place outer doors at - without last digit }
+    Message property Snappy_ElevatorRequiresPowerMessage = none auto const
+    { Message to show if the elevator requires power, but does not have. }
+    float Property ElevatorSpeed = 3.0 auto
+    { The time it takes the elevator car to go up or down one floor. }
+endgroup
 
-Group Optional_Properties collapsedonref
-	Door Property DoorIn Auto conditional
-	{ Door for elevator Car }
-	Door Property DoorOut Auto conditional
-	{ Door for shaft doorways }
-	Static Property shaftFloor Auto conditional
-	{ Shaft Floor }
-	Static Property shaftTop Auto conditional
-	{ Shaft Top/Ceiling }
-	Static Property shaftDoor1 Auto conditional
-	{ Bottom Shaft Doorway }
-	Static Property shaftDoor Auto conditional
-	{ Shaft Doorway }
-	Static Property shaftWall Auto conditional
-	{ Shaft Walls }
-	Door Property hatchDoor Auto conditional
-	{ Elevator hatch - Door }
-	Static Property hatch Auto conditional
-	{ Elevator hatch - Static}
-	Sound Property AltSound Auto conditional
-	{ Alternative elevator sound }
-	Sound Property Muzak Auto
-	{ Looping sound for muzak }
-	string Property SoundNode = "SoundNode01" Auto conditional
-	{ node in the nif to the sound source }
-	string Property CarNode = "Car01" Auto conditional
-	{ node in the nif to the place the car at }
-	string Property DoorInNode = "DoorWayNode01" Auto conditional
-	{ node in the nif to place inner door at}
-	string Property RootNode = "RootNode" Auto conditional
-	{ node in the nif to place skeleton at }
-	string Property ShaftNode = "NavCutterNode0" Auto conditional
-	{ node in the nif to place shaft walls at - without last digit }
-	string Property FloorNode = "ShaftFloor" Auto conditional
-	{ node in the nif to place shaft floor at }
-	string Property PanelNode = "Button03" Auto conditional
-	{ node in the nif to place button panel at }
-	string Property DoorOutNode = "DoorWayNode0" Auto conditional
-	{ node in the nif to place outer doors at - without last digit }
-	Float Property fSpeed = 8.0 const auto conditional
-	{ Speed of the car higher is slower }
-	EffectShader Property HighlightUnpoweredFX Auto Const
-	{ Effect Shader to highlight unpowered objects - unused atm }
-	Keyword Property BlockWorkshopInteractionKeyword const auto
-EndGroup
+bool property PlayMuzakOnlyWhileMoving hidden
+    bool function get()
+        return Snappy_ElevatorPlayMuzakOnlyWhileMoving.GetValue() != 0
+    endfunction
+endproperty
 
-;-- Variables ---------------------------------------
-ButtonData[] Property MyButtons Auto
-bool buttonsPlaced = False
-int CurrentFloor = 1
-int MuzakSoundInstance
-ObjectReference[] doorOutRef
-ObjectReference[] tempParts
+int floorCount = 0
+int currentFloor = 1
+int muzakSoundInstance = 0
 
-;-- Functions ---------------------------------------
+ObjectReference mySkeletonRef = none
+ObjectReference myElevatorCarRef = none
+ObjectReference myPlayerTriggerRef = none
+ObjectReference myCarLightRef = none
+ObjectReference myInsideDoorRef = none
+ObjectReference myHatchDoorRef = none
+ObjectReference myTopShaftRef = none
+ObjectReference myFloorShaftRef = none
+ObjectReference myPanelRef = none
+ObjectReference[] myShaftDoorwayRefs = none
+ObjectReference[] myShaftDoorRefs = none
 
-Function PlaceButtons()
-	Self.BlockActivation(True, True)
-	ObjectReference doorInRef = none
-	ObjectReference skeletonRef = none
-	
-	; show messagebox to choose nr of floors
-	nrFloors = ElevatorMsg1.Show()
+function AdjustElevatorSpeed(int aiCurrentFloor, int aiDestinationFloor)
+    mySkeletonRef.SetAnimationVariableFloat("fSpeed", (Math.abs(aiDestinationFloor - aiCurrentFloor) * ElevatorSpeed) / Snappy_ElevatorSpeedMult.GetValue())
+endfunction
 
-	If (!buttonsPlaced && (nrFloors>1))
-		buttonsPlaced = True
+function InitializeElevator()
+    if (!mySkeletonRef)
+        ; Show messagebox to choose number of floors.
+        floorCount = ElevatorMsg1.Show()
 
-		Self.AddKeyword(LinkCustom12) ;add keyword to find with placeable buttons
+        ; Skeleton
+        mySkeletonRef = self.PlaceAtNode(RootNode, Skeleton, abAttach = true)
+        Debug.TraceSelf(self, "InitializeElevator", "mySkeletonRef: " + mySkeletonRef)
+        mySkeletonRef.WaitFor3DLoad()
 
-		; place skeleton
-		skeletonRef = Self.PlaceAtNode(RootNode, Skeleton, 1, False, False, False, True)
-		skeletonRef.SetLinkedRef(Self, None)
-		Self.SetLinkedRef(skeletonRef, LinkCustom12)
-		Debug.Trace("Current movement speed: " + skeletonRef.GetAnimationVariableFloat("fspeed"))
-		skeletonRef.SetAnimationVariableFloat("fspeed", fSpeed)
+        ; Elevator car.
+        myElevatorCarRef = mySkeletonRef.PlaceAtNode(CarNode, Car01, abAttach = true)
+        Debug.TraceSelf(self, "InitializeElevator", "myElevatorCarRef: " + myElevatorCarRef)
 
-		; place car
-		ObjectReference carRef = none
-		carRef = skeletonRef.PlaceAtNode(CarNode, Car01, 1, False, False, False, True)
-		carRef.SetLinkedRef(skeletonRef, None)
-		skeletonRef.SetLinkedRef(carRef, LinkCustom11)
+        ; Player trigger, but only if we want it.
+        if (PlayerOnElevatorTrigger)
+            myPlayerTriggerRef = mySkeletonRef.PlaceAtNode(CarNode, PlayerOnElevatorTrigger, abAttach = true)
+            Debug.TraceSelf(self, "InitializeElevator", "myPlayerTriggerRef: " + myPlayerTriggerRef)
+        endif
+        Debug.TraceConditional(self + "-->InitializeElevator(): no player-on-elevator trigger", !PlayerOnElevatorTrigger)
 
-		if (hatch || hatchDoor)
-			ObjectReference hatchRef = None
-			If (hatch)
-				hatchRef = skeletonRef.PlaceAtNode("Car01", hatch, 1, False, False, False, True)
-			ElseIf(hatchDoor)
-				hatchRef = skeletonRef.PlaceAtNode("Car01", hatchDoor, 1, False, False, False, True)
-			endif
-			hatchRef.SetLinkedRef(Self, None)
-			;Self.SetLinkedRef(hatchRef, None)
-			hatchRef.AddKeyword(BlockWorkshopInteractionKeyword)
-		endif
+        ; Light, but only if we want it.
+        if (CarLight)
+            myCarLightRef = mySkeletonRef.PlaceAtNode("BulbBase01", CarLight)
+            Debug.TraceSelf(self, "InitializeElevator", "myCarLightRef: " + myCarLightRef)
+            myCarLightRef.WaitFor3DLoad()
+            myCarLightRef.SetPosition(myCarLightRef.x, myCarLightRef.y, myCarLightRef.z + CarLightZOffset)
+            myCarLightRef.AttachTo(mySkeletonRef)
+        endif
+        Debug.TraceConditional(self + "-->InitializeElevator(): no car light", !CarLight)
 
-		; place panel
-		ObjectReference panelRef = none
-		panelRef = skeletonRef.PlaceAtNode(PanelNode, ElevatorPanel, 1, False, False, False, True)
-		panelRef.SetLinkedRef(skeletonRef, None)
-		panelRef.SetLinkedRef(Self, None)
-		panelRef.RegisterForRemoteEvent(Self as ObjectReference, "OnWorkshopObjectDestroyed")
+        ; Hatch, but only if we want it.
+        if (HatchDoor)
+            myHatchDoorRef = mySkeletonRef.PlaceAtNode("Car01", HatchDoor, abAttach = true)
+            Debug.TraceSelf(self, "InitializeElevator", "myHatchDoorRef: " + myHatchDoorRef)
+        endif
+        Debug.TraceConditional(self + "-->InitializeElevator(): no hatch", !HatchDoor)
 
-		ObjectReference shaftDoorRef = none
-		ObjectReference tempRef = none
-		ObjectReference currentButton = None
-		int i = 1
-		While (i <= nrFloors)
-			; place shaft doorways
-			if (shaftDoor1 && i==1) ;if different 1st floor shaft
-				shaftDoorRef = Self.PlaceAtNode(ShaftNode + i , shaftDoor1, 1, False, False, False, True)
-			Else
-				shaftDoorRef = Self.PlaceAtNode(ShaftNode + i , shaftDoor, 1, False, False, False, True)
-			endif
-			shaftDoorRef.SetLinkedRef(Self as ObjectReference, None)
+        ; Elevator panel.
+        myPanelRef = mySkeletonRef.PlaceAtNode(PanelNode, ElevatorPanel, abAttach = true)
+        myPanelRef.WaitFor3DLoad()
+        Debug.TraceSelf(self, "InitializeElevator", "myPanelRef: " + myPanelRef)
 
-			; place outer doors
-			If (DoorOut)
-				tempRef = Self.PlaceAtNode(DoorOutNode + i , DoorOut, 1, False, False, False, True)
-				tempRef.SetLinkedRef(Self as ObjectReference, None)
-				tempRef.BlockActivation(False, True)
-				tempRef.AddKeyword(BlockWorkshopInteractionKeyword)
-				doorOutRef.add(tempRef)
-				doorOutRef[0].PlayGamebryoAnimation("Open")
-				if (doorOutRef[0].GetOpenState() != 1)
-					doorOutRef[0].SetOpen(True)
-				EndIf
-			endif
+        myShaftDoorwayRefs = new ObjectReference[floorCount]
+        myShaftDoorRefs = new ObjectReference[floorCount]
 
-			; place inside buttons - i-1 because of index starts with 0 instead of 1
-			currentButton = panelRef.PlaceAtNode(MyButtons[i-1].Node, MyButtons[i-1].Button as Form, 1, False, False, False, True) ;inside buttons
-			currentButton.SetLinkedRef(skeletonRef, None)
-			currentButton.SetLinkedRef(Self, None)
-			skeletonRef.SetLinkedRef(currentButton, MyButtons[i-1].LinkKeyword)
-			currentButton.RegisterForRemoteEvent(Self as ObjectReference, "OnWorkshopObjectDestroyed")
+        int i = 0
+        while (i < floorCount)
+            int floorNumber = i + 1
 
-			i += 1
-		EndWhile
+            ; Place shaft doorways.
+            if (i == 0 && ShaftDoor1) ; if different 1st floor shaft.
+                myShaftDoorwayRefs[i] = self.PlaceAtNode(ShaftNode + floorNumber, ShaftDoor1, abAttach = true)
+            else
+                myShaftDoorwayRefs[i] = self.PlaceAtNode(ShaftNode + floorNumber, ShaftDoor, abAttach = true)
+            endif
+            Debug.TraceSelf(self, "InitializeElevator", "myShaftDoorwayRefs[" + i + "]: " + myShaftDoorwayRefs[i])
 
-		; place shaft Top/Floor
-		If (shaftTop)
-			ObjectReference shaftTopRef = Self.PlaceAtNode(ShaftNode+i, shaftTop, 1, False, False, False, True)
-			shaftTopRef.SetLinkedRef(Self as ObjectReference, None)
-		endif
+            ; Place outside doors, but only if we want them.
+            if (DoorOut)
+                myShaftDoorRefs[i] = self.PlaceAtNode(DoorOutNode + floorNumber, DoorOut, abAttach = true)
+                Debug.TraceSelf(self, "InitializeElevator", "myShaftDoorRefs[" + i + "]: " + myShaftDoorRefs[i])
+                myShaftDoorRefs[i].WaitFor3DLoad()
+                ; Block activation for all doors except the bottom one.
+                myShaftDoorRefs[i].BlockActivation(i != 0, i != 0)
+                ; Open the bottom door only.
+                ;myShaftDoorRefs[i].SetOpen(i == 0)
+            endif
+            Debug.TraceConditional(self + "-->InitializeElevator(): no outside doors", !DoorOut)
 
-		If (shaftFloor)
-			ObjectReference shaftFloorRef = Self.PlaceAtNode(FloorNode, shaftFloor, 1, False, False, False, True)
-			shaftFloorRef.SetLinkedRef(Self as ObjectReference, None)
-		endif
+            ; Place inside buttons.
+            MyButtons[i].ref = myPanelRef.PlaceAtNode(MyButtons[i].node, MyButtons[i].button, abAttach = true)
+            Debug.TraceSelf(self, "InitializeElevator", "MyButtons[" + i + "].ref: " + MyButtons[i].ref)
+            MyButtons[i].ref.WaitFor3DLoad()
+            ;MyButtons[i].ref.PlayAnimation("StartOff")
+            (MyButtons[i].ref as Snappy:ElevatorInButtonScript).InitializeElevator(self)
 
-		; place inner door and open it
-		If (DoorIn)
-			doorInRef = skeletonRef.PlaceAtNode(DoorInNode, DoorIn, 1, False, False, False, True)
-			doorInRef.BlockActivation(False, True)
-			doorInRef.SetLinkedRef(skeletonRef, None)
-			skeletonRef.SetLinkedRef(doorInRef, LinkCustom10)
-			doorInRef.SetLinkedRef(Self, None)
-			doorInRef.AddKeyword(BlockWorkshopInteractionKeyword)
-			doorInRef.PlayGamebryoAnimation("Open")
-			;Failsafe: Make absolutely sure the doors are open.
-				if (doorInRef.GetOpenState() != 1)
-					doorInRef.SetOpen(True)
-				EndIf
-		endif
-	EndIf
-EndFunction
+            i += 1
+        endwhile
 
-Function SetCallButtonsOff(bool TurnButtonsOff)
-	ObjectReference skeletonRef = Self.GetLinkedRef(LinkCustom12)
-	ObjectReference currentButton = None
+        ; Top shaft, but only if we want it.
+        if (ShaftTop)
+            myTopShaftRef = self.PlaceAtNode(ShaftNode + (floorCount + 1), ShaftTop, abAttach = true)
+            Debug.TraceSelf(self, "InitializeElevator", "myTopShaftRef: " + myTopShaftRef)
+        endif
+        Debug.TraceConditional(self + "-->InitializeElevator(): no top shaft", !ShaftTop)
+        ; Floor shaft, but only if we want it.
+        if (ShaftFloor)
+            myFloorShaftRef = self.PlaceAtNode(FloorNode, ShaftFloor, abAttach = true)
+            Debug.TraceSelf(self, "InitializeElevator", "myFloorShaftRef: " + myFloorShaftRef)
+        endif
+        Debug.TraceConditional(self + "-->InitializeElevator(): no floor shaft", !ShaftFloor)
 
-	int I = 0
-	int Count = nrFloors + nrFloors*2 ; inside buttons for each level + the extra 2 outside buttons
+        ; Place inner door and open it.
+        if (DoorIn)
+            myInsideDoorRef = mySkeletonRef.PlaceAtNode(DoorInNode, DoorIn, abAttach = true)
+            Debug.TraceSelf(self, "InitializeElevator", "myInsideDoorRef: " + myInsideDoorRef)
+            myInsideDoorRef.WaitFor3DLoad()
+            myInsideDoorRef.BlockActivation(true, true)
+            myInsideDoorRef.SetOpen()
+        endif
+        Debug.TraceConditional(self + "-->InitializeElevator(): no inner door", !DoorIn)
+    endif
+endfunction
 
-	While (I < Count)
-		If (MyButtons[I].AttachToTrack)
-			currentButton = skeletonRef.GetLinkedRef(MyButtons[I].LinkKeyword)
-			If (TurnButtonsOff)
-				currentButton.DisableNoWait(False)
-			Else
-				currentButton.MoveToNode(skeletonRef, MyButtons[I].Node, "")
-				currentButton.EnableNoWait(False)
-			EndIf
-		EndIf
-		I += 1
-	EndWhile
-EndFunction
+int function GetCallButtonFloor(float afZPosition)
+    int i = 1
+    while (i < floorCount)
+        ; Check if between current (i) floor and previous (i - 1).
+        if (afZPosition >= myShaftDoorwayRefs[i - 1].z && afZPosition < myShaftDoorwayRefs[i].z)
+            return i
+        endif
+        i += 1
+    endwhile
+    ; Default to bottom floor.
+    return 1
+endfunction
 
-Function glow(String anim)
-		PlayGamebryoAnimation(anim)
-EndFunction
+function StartFlashing(float afDuration)
+    self.PlayGamebryoAnimation("Play", true)
+    self.StartTimer(afDuration)
+endfunction
+function StopFlashing()
+    self.PlayGamebryoAnimation("Stop", true)
+endfunction
+function SetGlowing(bool abShouldGlow)
+    if (abShouldGlow)
+        self.PlayGamebryoAnimation("On", true)
+    else
+        self.PlayGamebryoAnimation("Stop", true)
+    endif
+endfunction
 
-;not sure I'll keep the power option or not... either way change loop length to current
-Function PowerButtons(bool shouldBePowered)
-	ObjectReference skeletonRef = Self.GetLinkedRef(LinkCustom12)
-	int I = 0
-	int Count = MyButtons.length
-	While (I < Count)
-		(skeletonRef.GetLinkedRef(MyButtons[I].LinkKeyword) as Snappy:ElevatorInButtonScript).SetHasPower(shouldBePowered)
-		I += 1
-	EndWhile
-EndFunction
+event OnTimer(int aiTimerID)
+    StopFlashing()
+endevent
 
-Function DoFloorChange(int floorToGoTo)
-	ObjectReference skeletonRef = Self.GetLinkedRef(LinkCustom12)
-	ObjectReference doorInRef = skeletonRef.GetLinkedRef(LinkCustom10)
+function PowerButtons(bool shouldBePowered)
+    if (self.HasKeyword(WorkshopCanBePowered))
+        var[] args = new var[1]
+        args[0] = shouldBePowered
+        self.SendCustomEvent("PowerChange", args)
+    endif
+endfunction
 
-	If (floorToGoTo != CurrentFloor)
-		;close doors
-		If (DoorOut)
-			doorOutRef[CurrentFloor-1].SetOpen(False)
-			Utility.Wait(0.3)
-		EndIf
-		If (DoorIn)
-			doorInRef.PlayGamebryoAnimation("Close", true, 1.0)
-			Utility.Wait(0.9)
-		EndIf
+function PlayMuzak(bool abShouldPlay)
+    ; Ignore if Muzak sound is not set.
+    if (Muzak)
+        if (abShouldPlay && muzakSoundInstance == 0)
+            muzakSoundInstance = Muzak.Play(myElevatorCarRef)
+        elseif (!abShouldPlay && muzakSoundInstance != 0)
+            Sound.StopInstance(muzakSoundInstance)
+            muzakSoundInstance = 0
+        endif
+    endif
+endfunction
 
-		; move the elevator car
-		int PlatformSoundInstance = 0
+function DoFloorChange(int aiFloorToGoTo)
+    if (aiFloorToGoTo != currentFloor)
+        ; Close doors.
+        if (DoorOut)
+            ObjectReference doorOutRef = myShaftDoorRefs[currentFloor - 1]
+            doorOutRef.BlockActivation(true, true)
+            doorOutRef.SetOpen(false)
+            ; Not sure why, but the outside doors don't seem to close unless they disabled and re-enabled.
+            doorOutRef.Disable()
+            doorOutRef.EnableNoWait()
+            Utility.Wait(0.3)
+        endif
+        if (myInsideDoorRef)
+            myInsideDoorRef.SetOpen(false)
+            Utility.Wait(0.9)
+        endif
 
-		if(AltSound) ;stop sound from hkx and play alternative
-			Utility.Wait(0.3)
-			skeletonRef.PlayAnimation("SoundStop")
-			PlatformSoundInstance = AltSound.Play(skeletonRef.GetLinkedRef(LinkCustom11) as ObjectReference)
-		EndIf
+        if (!PlayMuzakOnlyWhileMoving)
+            ; Start muzak.
+            PlayMuzak(true)
+        endif
 
-		; move the car
-		skeletonRef.PlayAnimationAndWait(FloorAnims[floorToGoTo - 1], Done)
+        int platformSoundInstance = 0
+        if (AltSound) ; Stop sound from hkx and play alternative sound.
+            Utility.Wait(0.3)
+            mySkeletonRef.PlayAnimation("SoundStop")
+            platformSoundInstance = AltSound.Play(myElevatorCarRef)
+        endif
 
-		if(AltSound)
-			Sound.StopInstance(PlatformSoundInstance)
-		EndIf
+        ; Adjust elevator speed.
+        AdjustElevatorSpeed(currentFloor, aiFloorToGoTo)
+        ; Move the car.
+        mySkeletonRef.PlayAnimationAndWait(FloorAnims[aiFloorToGoTo - 1], Done)
 
-		;open doors
-		If (DoorIn)
-			doorInRef.PlayGamebryoAnimation("Open", true, afEaseInTime = 1.0)
-			Utility.Wait(0.3)
-		EndIf
-
-		If (DoorOut)
-			doorOutRef[floorToGoTo - 1].PlayGamebryoAnimation("Open", true, afEaseInTime = 1.0)
-			if (doorOutRef[floorToGoTo - 1].GetOpenState() != 1)
-				doorOutRef[floorToGoTo - 1].SetOpen(True)
-			endif
-		EndIf
-
-		CurrentFloor = floorToGoTo
-		;Self.SyncNavCutFloor()
-	EndIf
-EndFunction
-
-bool Function GoToFloor(int floorToGoTo)
-	Self.GoToState("Busy")
-
-	;If (Self.IsPowered())
-		Self.DoFloorChange(floorToGoTo)
-	;Else
-		;Snappy_ElevatorRequiresPowerMessage.Show(0, 0, 0, 0, 0, 0, 0, 0, 0)
-	;EndIf
-
-	Self.GoToState("Ready")
-	return False
-EndFunction
-
-Function DestroyElevator()
-	ObjectReference skeletonRef = Self.GetLinkedRef(LinkCustom12)
-	Debug.Trace(skeletonRef)
-	ObjectReference[] LinkedRefs = Self.GetRefsLinkedToMe()
-	int i = 0
-	while (i < LinkedRefs.length)
-		LinkedRefs[i].Delete()
-		i += 1
-	endwhile
-
-	skeletonRef.GetLinkedRef(LinkCustom11).Delete() ; not sure if this is needed... delete car...
-
-	skeletonRef.ResetKeyword(LinkCustom12) ;remove or reset?
-	skeletonRef.RemoveKeyword(LinkCustom12)
-	Self.RemoveKeyword(LinkCustom12)
-
-	If (Muzak as bool)
-		Sound.StopInstance(MuzakSoundInstance)
-	EndIf
-
-	skeletonRef.Delete()
-	skeletonRef = None
-
-	doorOutRef.Clear()
-	buttonsPlaced = False
-EndFunction
-
-;-- Events ---------------------------------------
-Event OnCellAttach()
-	;Debug.MessageBox("cell attach") some leftovers? This triggers for all built elevators and not only the current... why?
-		If (!buttonsPlaced)
-			Self.PlaceButtons()
-			Self.BlockActivation(True, True)
-		EndIf
-EndEvent
-
-Event OnInit()
-	doorOutRef = new ObjectReference[0]
-	Self.RegisterForMenuOpenCloseEvent("WorkshopMenu")
-EndEvent
-
-Event OnMenuOpenCloseEvent(string asMenuName, bool abOpening)
-	If (asMenuName == "WorkshopMenu")
-			If (abOpening)
-				Self.enable()
-			Else
-				Self.disable()
-			EndIf
-	EndIf
-EndEvent
-
-Event OnPowerOn(ObjectReference akPowerGenerator)
-	ObjectReference skeletonRef = Self.GetLinkedRef(LinkCustom12)
-	skeletonRef.PlayAnimation("LightOn01")
-	Self.PowerButtons(True)
-	If (Muzak)
-		MuzakSoundInstance = Muzak.Play(skeletonRef.GetLinkedRef(LinkCustom11) as ObjectReference)
-	EndIf
-EndEvent
-
-Event OnPowerOff()
-	ObjectReference skeletonRef = Self.GetLinkedRef(LinkCustom12)
-	skeletonRef.PlayAnimation("LightOff01")
-	Self.PowerButtons(False)
-	If (Muzak as bool)
-		Sound.StopInstance(MuzakSoundInstance)
-	EndIf
-EndEvent
-
-Event OnWorkshopObjectPlaced(ObjectReference akReference)
-	Debug.Trace("Placed")
-	Self.PlaceButtons()
-	;Self.PlaceNavCuts()
-	Self.BlockActivation(True, True)
-EndEvent
-
-Event OnWorkshopObjectGrabbed(ObjectReference akReference)
-	;Self.SetCallButtonsOff(True)
-	;Self.SetNavCutOff(True)
-	Debug.Trace("Grabbed")
-	DestroyElevator()
-EndEvent
-
-Event OnWorkshopObjectMoved(ObjectReference akReference)
-	;Self.SetCallButtonsOff(False)
-	Self.PlaceButtons()
-	Self.GoToState("WaitingForActivate")
-	Debug.Trace("moved")
-EndEvent
-
-Event OnWorkshopObjectDestroyed(ObjectReference akReference)
-	DestroyElevator()
-
-	UnregisterForMenuOpenCloseEvent("WorkshopMenu")
-	Delete()
-EndEvent
-
-Event ObjectReference.onActivate(ObjectReference akSender, ObjectReference akActionRef)
-	; Empty function
-EndEvent
+        if (AltSound)
+            Sound.StopInstance(platformSoundInstance)
+        endif
 
 
-;-- States -------------------------------------------
-State Busy
-	bool Function GoToFloor(int floorToGoTo)
-		return True
-	EndFunction
-EndState
+        if (!PlayMuzakOnlyWhileMoving)
+            ; Stop muzak.
+            PlayMuzak(false)
+        endif
 
-Auto State Ready
-	Event OnEndState(string asNewState)
-		; Empty function
-	EndEvent
-EndState
+        ; Open doors
+        if (myInsideDoorRef)
+            myInsideDoorRef.SetOpen()
+            Utility.Wait(0.3)
+        endif
+        if (DoorOut)
+            ObjectReference doorOutRef = myShaftDoorRefs[aiFloorToGoTo - 1]
+            doorOutRef.SetOpen()
+            doorOutRef.BlockActivation(false, false)
+        endif
+
+        currentFloor = aiFloorToGoTo
+    else
+        ; If we are already at the floor just open the doors.
+        if (DoorOut)
+            ObjectReference doorOutRef = myShaftDoorRefs[currentFloor - 1]
+            doorOutRef.SetOpen()
+        endif
+    endif
+endfunction
+bool function GoToFloor(int aiFloorToGoTo)
+    ; Ignore unless in 'Ready' state.
+    return true
+endfunction
+
+function TurnOn()
+    if (myCarLightRef)
+        ;myCarLightRef.PlayAnimation("LightOn01")
+    endif
+    PowerButtons(true)
+endfunction
+function TurnOff()
+    if (myCarLightRef)
+        ;myCarLightRef.PlayAnimation("LightOff01")
+    endif
+    PowerButtons(false)
+endfunction
+
+function DestroyElevator()
+    int i = floorCount
+    while (i > 0)
+        i -= 1
+        MyButtons[i].ref.Delete()
+    endwhile
+    MyButtons = none
+
+    if (myShaftDoorRefs)
+        i = floorCount
+        while (i > 0)
+            i -= 1
+            myShaftDoorRefs[i].Delete()
+        endwhile
+        myShaftDoorRefs = none
+    endif
+
+    i = floorCount
+    while (i > 0)
+        i -= 1
+        myShaftDoorwayRefs[i].Delete()
+    endwhile
+    myShaftDoorwayRefs = none
+
+    myPanelRef.Delete()
+    myPanelRef = none
+    if (myFloorShaftRef)
+        myFloorShaftRef.Delete()
+        myFloorShaftRef = none
+    endif
+    if (myTopShaftRef)
+        myTopShaftRef.Delete()
+        myTopShaftRef = none
+    endif
+    if (myHatchDoorRef)
+        myHatchDoorRef.Delete()
+        myHatchDoorRef = none
+    endif
+    if (myInsideDoorRef)
+        myInsideDoorRef.Delete()
+        myInsideDoorRef = none
+    endif
+    if (myCarLightRef)
+        myCarLightRef.Delete()
+        myCarLightRef = none
+    endif
+    if (myPlayerTriggerRef)
+        myPlayerTriggerRef.Delete()
+        myPlayerTriggerRef = none
+    endif
+    myElevatorCarRef.Delete()
+    myElevatorCarRef = none
+    mySkeletonRef.Delete()
+    mySkeletonRef = none
+
+    Debug.Trace(self + " destroyed!")
+endfunction
+
+event ObjectReference.OnWorkshopMode(ObjectReference akSender, bool abStart)
+    if (abStart)
+        self.Enable()
+    else
+        self.Disable()
+    endif
+endevent
+
+event OnPowerOn(ObjectReference akPowerGenerator)
+    TurnOn()
+endevent
+event OnPowerOff()
+    TurnOff()
+endevent
+
+event OnWorkshopObjectPlaced(ObjectReference akWorkshopRef)
+    Debug.Trace(self + " placed.")
+    self.RegisterForRemoteEvent(akWorkshopRef, "OnWorkshopMode")
+    self.InitializeElevator()
+    self.TurnOn()
+    if (!PlayMuzakOnlyWhileMoving)
+        PlayMuzak(true)
+    endif
+    self.GoToState("Ready")
+endevent
+
+event OnWorkshopObjectDestroyed(ObjectReference akWorkshopRef)
+    Debug.Trace(self + ": has received OnWorkshopObjectDestroyed.")
+    self.Gotostate("Scrapped")
+    self.UnregisterForAllEvents()
+    self.TurnOff()
+    PlayMuzak(false)
+    self.DestroyElevator()
+endevent
+
+auto state Busy
+    ; Empty state to ignore go to floor requests.
+endstate
+
+state Ready
+    bool function GoToFloor(int aiFloorToGoTo)
+        self.GoToState("Busy")
+
+        if (false && self.HasKeyword(WorkshopCanBePowered) && !self.IsPowered()) ; Always false for now.
+            if (Snappy_ElevatorRequiresPowerMessage)
+                Snappy_ElevatorRequiresPowerMessage.Show()
+            endif
+        else
+            self.DoFloorChange(aiFloorToGoTo)
+        endif
+
+        self.GoToState("Ready")
+
+        return false
+    endfunction
+endstate
+
+state Scrapped
+    event OnPowerOn(ObjectReference akPowerGenerator)
+        ; Ignore event.
+    endevent
+    event OnPowerOff()
+        ; Ignore event.
+    endevent
+endstate
